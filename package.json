@@ -1,0 +1,25 @@
+{
+  "name": "verify-smart-contract",
+  "version": "0.1.0",
+  "description": "Multi-agent smart contract security audit pipeline",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/api/index.ts",
+    "build": "tsc",
+    "start": "node dist/api/index.js",
+    "audit": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "openai": "^4.52.7",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.10",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.3"
+  }
+}
