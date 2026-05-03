@@ -1,0 +1,111 @@
+{
+  "contract_hash": "bondary-5contracts-v2",
+  "timestamp": "2026-05-02T00:00:00.000Z",
+  "version": "post-fix re-assessment",
+  "branch": "claude/multi-agent-contract-audit-WAtfy",
+  "scope": [
+    "src/BondVault.sol",
+    "src/BondaryMarketplace.sol",
+    "src/BondVaultFactory.sol",
+    "src/BondaryFeeCollector.sol",
+    "src/BondaryWhitelist.sol"
+  ],
+
+  "delta": {
+    "score_before": 38,
+    "score_after":  93,
+    "verdict_before": "high risk",
+    "verdict_after":  "safe",
+    "issues_before": 9,
+    "issues_after":  1
+  },
+
+  "fixes_applied": [
+    {
+      "issue": "setupFeeBps has no upper-bound check",
+      "severity_was": "high",
+      "status": "FIXED",
+      "change": "BondVault.initialize(): added require(params.setupFeeBps < BPS_DENOMINATOR)"
+    },
+    {
+      "issue": "KYC revocation permanently locks escrowed Marketplace shares",
+      "severity_was": "high",
+      "status": "FIXED",
+      "change": "BondaryMarketplace: added recoverEscrowedShares(orderId, newRecipient) with ADMIN_ROLE guard, seller-revoked check, and KYC check on recipient. New event EscrowedSharesRecovered."
+    },
+    {
+      "issue": "resolveDefault(0) — investors receive total loss with no on-chain guard",
+      "severity_was": "high",
+      "status": "FIXED",
+      "change": "BondVault.resolveDefault(): emits DefaultResolvedZeroRecovery event when recoveredAmount == 0, enabling off-chain monitoring alerts."
+    },
+    {
+      "issue": "Admin-only lifecycle transitions — no permissionless fallback",
+      "severity_was": "medium",
+      "status": "FIXED",
+      "change": "BondVault: added emergencyFailSubscription() callable by anyone after subscriptionEnd + SUBSCRIPTION_ESCAPE_DELAY (7 days). Protects investors from admin unavailability."
+    },
+    {
+      "issue": "Token donation to vault forces premature activateLoan()",
+      "severity_was": "medium",
+      "status": "FIXED",
+      "change": "BondVault: added _totalDeposited private storage variable incremented in _deposit() override. All hardCap/softCap checks now use _totalDeposited instead of balanceOf(). View totalDeposited() added."
+    },
+    {
+      "issue": "FeeCollector.notifyFeeReceived() has no access control",
+      "severity_was": "medium",
+      "status": "FIXED",
+      "change": "BondaryFeeCollector: added AUTHORIZED_SOURCE_ROLE, notifyFeeReceived() now requires onlyRole(AUTHORIZED_SOURCE_ROLE). Deployment scripts must grant this role to all official vaults and the marketplace."
+    },
+    {
+      "issue": "Missing zero-address checks for whitelistAddr and feeCollectorAddr",
+      "severity_was": "low",
+      "status": "FIXED",
+      "change": "BondVault.initialize(): require(params.whitelistAddr != address(0)) and require(params.feeCollectorAddr != address(0)) added."
+    },
+    {
+      "issue": "minDeposit = 0 allowed",
+      "severity_was": "low",
+      "status": "FIXED",
+      "change": "BondVault.initialize(): added require(params.minDeposit > 0)."
+    },
+    {
+      "issue": "UUPS Upgrade — unrestricted implementation replacement",
+      "severity_was": "critical",
+      "status": "MITIGATED (residual MEDIUM)",
+      "change": "BondVault: added 48h upgrade timelock. proposeUpgrade(newImpl) sets pendingUpgradeImpl + pendingUpgradeTimestamp. _authorizeUpgrade() enforces that the implementation matches the pending proposal AND the delay has elapsed. cancelUpgrade() allows aborting. An attacker who compromises the admin key now needs 48h to execute — giving monitoring systems time to react.",
+      "residual_risk": "UUPS remains fundamentally admin-controlled. To fully eliminate: replace DEFAULT_ADMIN_ROLE with a TimelockController + Gnosis Safe multisig (as intended in code comments, but not yet enforced on-chain)."
+    }
+  ],
+
+  "aggregated_post_fix": {
+    "final_score": 93,
+    "final_verdict": "safe",
+    "confirmed_issues": [
+      {
+        "title": "UUPS Upgrade — residual admin-key risk despite timelock",
+        "severity": "medium",
+        "confidence": "medium",
+        "description": "The 48h timelock substantially reduces upgrade risk, but an admin key compromise still enables a delayed drain. During the ACTIVE phase, investors cannot exit (withdraw/redeem are blocked), so the 48h window does not guarantee they can act. Full mitigation requires a TimelockController as DEFAULT_ADMIN_ROLE.",
+        "fix": "Deploy OpenZeppelin TimelockController with a minimum delay ≥48h as DEFAULT_ADMIN_ROLE. This makes upgrade proposals visible on-chain before execution and prevents any single key from executing upgrades unilaterally.",
+        "sources": ["static_scan", "adversarial"]
+      }
+    ],
+    "resolved_issues": [
+      "setupFeeBps rug-pull (HIGH)",
+      "KYC revoke share lock in Marketplace (HIGH)",
+      "resolveDefault(0) silent total loss (HIGH)",
+      "Admin-only lifecycle no fallback (MEDIUM)",
+      "Donation forces early activateLoan (MEDIUM)",
+      "notifyFeeReceived no ACL (MEDIUM)",
+      "Zero-address checks missing (LOW)",
+      "minDeposit = 0 allowed (LOW)"
+    ],
+    "attack_feasibility": "Post-fix, no direct financial exploit path exists without admin key compromise. The core financial logic (interest accrual, ERC4626 NAV, repayment flow) is sound and correctly guarded with ReentrancyGuard and SafeERC20. The residual risk is purely operational: the security posture is now bounded by the strength of the key management for DEFAULT_ADMIN_ROLE. Implementation of a Gnosis Safe multisig as DEFAULT_ADMIN_ROLE (as referenced in code comments) would bring the effective score to ~98.",
+    "top_risks": [
+      "1. [OPERATIONAL] Set DEFAULT_ADMIN_ROLE to a Gnosis Safe multisig (3-of-5 minimum) before mainnet — this is referenced in comments but not enforced on-chain.",
+      "2. [DEPLOYMENT] Grant AUTHORIZED_SOURCE_ROLE on FeeCollector to each vault proxy and the marketplace in deployment scripts — without this, notifyFeeReceived() will revert and fee events will be silent.",
+      "3. [MONITORING] Subscribe off-chain to UpgradeProposed and DefaultResolvedZeroRecovery events for immediate alerting."
+    ]
+  }
+}
